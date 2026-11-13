@@ -117,11 +117,12 @@ npx playwright install chromium
 npm test
 ```
 
-Node 22 or newer. 89 checks cover loading, filters, saving without data loss,
+Node 22 or newer. 101 checks cover loading, filters, saving without data loss,
 every guard, concurrent writes, a change made while a save is in flight, the
-privilege check, paging, both languages,
-the theme fallback, and a set of static checks on the source itself — that
-every CSS class used has a rule, and that neither language's texts contain
+privilege check with the privilege type as text, as number and missing,
+paging, both languages, the theme fallback, and a set of static checks on the
+source itself — that every CSS class used has a rule, that no inline style
+sits outside the theme fallback, and that neither language's texts contain
 leftovers from the other.
 
 ## Notes and limitations

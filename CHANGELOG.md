@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.1.3] — 2026-11-13 23:07 — 350ebe6
+
+### Fixed
+
+- The privilege check picked the write privilege by type 2, which Dataverse
+  defines as Read; Write is 3. It now accepts `Write`, `3` or a name starting
+  with `prvWrite`. As long as the Web API returns the type as text, the name
+  match carried it; had it returned the number, the tool would have checked
+  and listed read access instead of write access.
+- The mocked Web API returned the write privilege with type 2 and so confirmed
+  the mistake. It now returns the full privilege list, read before write, with
+  the type as text, as number and missing.
+- The role list in the privilege dialog used an inline style; it uses a class
+  now. A static check rejects inline styles outside the theme fallback and
+  proves first that it finds the fallback and fires on known-bad samples.
+
 ## 1.1.2
 
 - Copyright holder set: Ayonto UG (haftungsbeschränkt).

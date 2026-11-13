@@ -1,4 +1,4 @@
-const { chromium, open, row, saveAll, Counter } = require('./harness');
+const { chromium, open, row, saveAll, Counter, WRITE_PRIVILEGE, READ_PRIVILEGE } = require('./harness');
 
 (async () => {
   const browser = await chromium.launch();
@@ -262,6 +262,25 @@ const { chromium, open, row, saveAll, Counter } = require('./harness');
     unknown.includes('is unknown') && !unknown.includes('You cannot change it'), unknown.split('\n')[0]);
   await t.context.close();
 
+  c.section('Privilege type as the API returns it');
+  for (const as of ['string', 'number', 'missing']) {
+    t = await open(browser, { privilegeTypeAs: as });
+    c.check('writer may write (' + as + ')',
+      !(await t.page.locator('#tbody input[type=checkbox]').first().isDisabled()));
+    await t.page.locator('#who-can-change').click();
+    await t.page.waitForTimeout(600);
+    const lookups = t.log.requests.filter(r => r.includes('roleprivilegescollection'));
+    c.check('roles looked up by the write privilege (' + as + ')',
+      lookups.length === 1 && lookups[0].includes(WRITE_PRIVILEGE) && !lookups[0].includes(READ_PRIVILEGE),
+      lookups.join(' | '));
+    await t.context.close();
+
+    t = await open(browser, { privilegeTypeAs: as, canWrite: false });
+    c.check('read access alone stays read-only (' + as + ')',
+      await t.page.locator('#tbody input[type=checkbox]').first().isDisabled());
+    await t.context.close();
+  }
+
   c.section('Source checks');
   {
     const fs = require('fs'), path = require('path');
@@ -299,6 +318,19 @@ const { chromium, open, row, saveAll, Counter } = require('./harness');
     const defined = new Set([...css.matchAll(/\.([a-zA-Z][\w-]*)/g)].map(m => m[1]));
     const missing = [...used].filter(x => !x.endsWith('-') && !defined.has(x));
     c.check('every class used has a rule', missing.length === 0, missing.join(', '));
+
+    const INLINE_STYLE = /\bstyle\s*=|setAttribute\(\s*["']style["']|\.style\.[a-zA-Z]|\.cssText\b/;
+    const fbStart = html.indexOf('function themeMissingScreen(){');
+    const fbEnd = fbStart < 0 ? -1 : html.indexOf('\n}\n', fbStart);
+    c.check('theme fallback located and holds the allowed inline styles',
+      fbStart >= 0 && fbEnd > fbStart && INLINE_STYLE.test(html.slice(fbStart, fbEnd)));
+    c.check('inline-style detector would fire',
+      INLINE_STYLE.test('h += "<p style=\\"margin-top:12px\\">";')
+      && INLINE_STYLE.test('d.setAttribute("style", "margin:0");')
+      && INLINE_STYLE.test('el.style.marginTop = "4px";'));
+    const outside = fbStart < 0 ? html : html.slice(0, fbStart) + html.slice(fbEnd);
+    const inline = outside.split('\n').filter(l => INLINE_STYLE.test(l)).map(l => l.trim());
+    c.check('no inline style outside the theme fallback', inline.length === 0, inline.join(' | '));
 
     c.check('role query uses the documented entity set',
       html.includes('roleprivilegescollection?') && !html.includes('"roleprivileges?'));

@@ -378,7 +378,9 @@ async function checkPrivileges(){
   try{
     S.ich = (await web("WhoAmI()")).UserId;
     var P = (await web("EntityDefinitions(LogicalName='pdfsetting')/Privileges?$select=Name,PrivilegeId,PrivilegeType")).value || [];
-    var w = P.filter(function(x){ return x.PrivilegeType === 2 || /write/i.test(x.Name || ""); })[0];
+    var w = P.filter(function(x){
+      return x.PrivilegeType === "Write" || x.PrivilegeType === 3 || /^prvWrite/i.test(x.Name || "");
+    })[0];
     if(!w){ return; }
     S.writePrivilege = w.PrivilegeId;
     var U = await web("systemusers(" + S.ich + ")/Microsoft.Dynamics.CRM.RetrieveUserPrivileges()");
@@ -416,7 +418,7 @@ async function whoCanChangeFlow(){
     var R = await rolesWithWriteAccess();
     if(!R.length){ h += '<div class="note-box">' + esc(t("wdKeine")) + "</div>"; }
     else {
-      h += "<p style=\"margin-top:12px\">" + esc(t("wdRollen")(R.length)) + "</p><ul>"
+      h += '<p class="abstand">' + esc(t("wdRollen")(R.length)) + "</p><ul>"
          + R.map(function(x){ return "<li>" + esc(x) + "</li>"; }).join("") + "</ul>";
     }
   }catch(e){

@@ -31,6 +31,25 @@ const TEMPLATES = [
 ];
 
 const WRITE_PRIVILEGE = '11111111-1111-1111-1111-111111111111';
+const READ_PRIVILEGE = '22222222-2222-2222-2222-222222222222';
+
+const PRIVILEGES = [
+  ['prvCreatepdfsetting', '33333333-3333-3333-3333-333333333333', 'Create', 1],
+  ['prvReadpdfsetting', READ_PRIVILEGE, 'Read', 2],
+  ['prvWritepdfsetting', WRITE_PRIVILEGE, 'Write', 3],
+  ['prvDeletepdfsetting', '44444444-4444-4444-4444-444444444444', 'Delete', 4],
+  ['prvAppendpdfsetting', '55555555-5555-5555-5555-555555555555', 'Append', 7],
+  ['prvAppendTopdfsetting', '66666666-6666-6666-6666-666666666666', 'AppendTo', 8]
+];
+
+function privileges(as) {
+  return PRIVILEGES.map(([Name, PrivilegeId, label, value]) => {
+    const p = { Name, PrivilegeId };
+    if (as === 'string') p.PrivilegeType = label;
+    if (as === 'number') p.PrivilegeType = value;
+    return p;
+  });
+}
 
 class Counter {
   constructor() { this.total = 0; this.failed = 0; }
@@ -58,6 +77,7 @@ async function open(browser, options) {
     tables: TABLES,
     theme: true,
     canWrite: true,
+    privilegeTypeAs: 'string',
     patchStatus: 204,
     rolesWithWrite: [{ roleid: 'r1' }, { roleid: 'r2' }, { roleid: 'r3' }],
     roleNames: { r1: 'System Administrator', r2: 'PDF Admin', r3: 'System Administrator' },
@@ -92,9 +112,10 @@ async function open(browser, options) {
     if (rel.startsWith('WhoAmI')) return json(200, { UserId: 'u1' });
     if (rel.indexOf('RetrieveUserPrivileges') >= 0)
       return json(200, { RolePrivileges: o.userPrivilegesEmpty ? []
-        : o.canWrite ? [{ PrivilegeId: WRITE_PRIVILEGE }] : [{ PrivilegeId: 'other' }] });
+        : o.canWrite ? [{ PrivilegeId: READ_PRIVILEGE }, { PrivilegeId: WRITE_PRIVILEGE }]
+        : [{ PrivilegeId: READ_PRIVILEGE }] });
     if (rel.indexOf('/Privileges') >= 0)
-      return json(200, { value: [{ Name: 'prvWritepdfsetting', PrivilegeId: WRITE_PRIVILEGE, PrivilegeType: 2 }] });
+      return json(200, { value: privileges(o.privilegeTypeAs) });
     if (rel.startsWith('roleprivilegescollection?')) return json(200, { value: o.rolesWithWrite });
     if (rel.startsWith('roles?')) {
       const ids = (rel.match(/roleid eq (\w+)/g) || []).map(x => x.split(' ').pop());
@@ -161,4 +182,4 @@ async function saveAll(page) {
   await page.waitForTimeout(500);
 }
 
-module.exports = { chromium, open, row, saveAll, Counter, WRITE_PRIVILEGE };
+module.exports = { chromium, open, row, saveAll, Counter, WRITE_PRIVILEGE, READ_PRIVILEGE };

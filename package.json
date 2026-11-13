@@ -1,6 +1,6 @@
 {
   "name": "dataverse-pdf-export-switch",
-  "version": "1.1.2",
+  "version": "1.1.3",
   "description": "Web resource for Microsoft Dataverse that shows which tables have Export to PDF enabled and lets administrators switch it per table.",
   "author": {
     "name": "Ayonto UG (haftungsbeschränkt)",
