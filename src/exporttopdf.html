@@ -1,0 +1,835 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Export to PDF</title>
+<link rel="stylesheet" href="theme.css">
+<link rel="stylesheet" href="exporttopdf.css">
+</head>
+<body class="x-app">
+<div class="header">
+  <div>
+    <h1 id="title">Export to PDF</h1>
+  </div>
+  <div class="header-right">
+    <span id="host"></span>
+    <span class="environment" id="environment">…</span>
+    <span class="language" role="group" aria-label="Sprache / Language">
+      <button type="button" data-l="de" aria-pressed="false">DE</button>
+      <button type="button" data-l="en" aria-pressed="false">EN</button>
+    </span>
+  </div>
+</div>
+
+<div class="toolbar">
+  <input type="search" id="search" autocomplete="off">
+  <div class="filter" role="group" id="filters">
+    <button class="x-chip" type="button" data-f="all" aria-pressed="true"></button>
+    <button class="x-chip" type="button" data-f="enabled" aria-pressed="false"></button>
+    <button class="x-chip" type="button" data-f="custom" aria-pressed="false"></button>
+    <span class="divider"></span>
+    <button class="x-chip schalt" type="button" id="filter-template" aria-pressed="true"></button>
+  </div>
+  <div class="actions">
+    <span class="zaehler" id="counter"></span>
+    <button class="x-btn x-btn-md x-btn-secondary" type="button" id="discard" disabled></button>
+    <button class="x-btn x-btn-md x-btn-primary" type="button" id="save" disabled></button>
+  </div>
+</div>
+
+<div id="message" role="status" aria-live="polite"></div>
+
+<main>
+  <div class="load" id="loading"><span id="loading-text"></span><span class="x-dots is-on"><span></span><span></span><span></span></span></div>
+  <table class="x-table" id="tbl" hidden>
+    <thead><tr>
+      <th class="col-pdf" id="col-pdf"></th>
+      <th id="col-table"></th>
+      <th class="col-templates" id="col-templates"></th>
+      <th class="col-status" id="col-status"></th>
+    </tr></thead>
+    <tbody id="tbody"></tbody>
+  </table>
+  <div class="x-empty" id="empty" hidden></div>
+</main>
+
+<div class="fuss">
+  <span id="footer"></span>
+  <span class="wert" id="stored"></span>
+  <span class="rechts">
+    <a href="#" id="who-can-change"></a>
+    <span class="zeiger" id="cache-hint"></span>
+    <button class="x-btn x-btn-secondary" type="button" id="cache"></button>
+  </span>
+</div>
+
+<dialog id="dlg">
+  <form method="dialog">
+    <div class="dlg-title" id="dlg-title"></div>
+    <div class="dlg-body" id="dlg-body"></div>
+    <div class="dlg-actions">
+      <button class="x-btn x-btn-md x-btn-secondary" value="nein" type="submit" id="dlg-cancel"></button>
+      <button class="x-btn x-btn-md x-btn-primary" value="ja" type="submit" id="dlg-ok"></button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="dlgW">
+  <form method="dialog">
+    <div class="dlg-title" id="dlgW-title"></div>
+    <div class="dlg-body" id="dlgW-body"></div>
+    <div class="dlg-actions"><button class="x-btn x-btn-md x-btn-primary" value="zu" type="submit" id="dlgW-close"></button></div>
+  </form>
+</dialog>
+
+<dialog id="dlgC">
+  <form method="dialog">
+    <div class="dlg-title" id="dlgC-title"></div>
+    <div class="dlg-body" id="dlgC-body"></div>
+    <div class="dlg-actions">
+      <button class="x-btn x-btn-md x-btn-secondary" value="nein" type="submit" id="dlgC-cancel"></button>
+      <button class="x-btn x-btn-md x-btn-primary" value="ja" type="submit" id="dlgC-ok"></button>
+    </div>
+  </form>
+</dialog>
+
+<script>
+(function(){
+"use strict";
+
+var T = {
+de: {
+  titel:"Export to PDF", suche:"Tabelle suchen …",
+  fAlle:"Alle", fAktiv:"Eingeschaltet", fEigen:"Eigene", fVorlage:"Nur mit Vorlage",
+  verwerfen:"Verwerfen", save:"Speichern", cache:"Zwischenspeicher leeren",
+  hPdf:"PDF", hTab:"Tabelle", hVor:"Vorlagen", hSt:"Status",
+  lade:"Einen Moment, die Tabellen werden geladen …",
+  empty:"Keine Tabelle passt zu Suche und Filter.",
+  zuViele:function(n){ return "Es werden die ersten 400 von " + n + " Tabellen gezeigt. Bitte die Suche eingrenzen."; },
+  zaehler:function(a,g){ return "<b>" + a + "</b> eingeschaltet" + (g ? " &middot; <b>" + g + "</b> geändert" : ""); },
+  gelesen:function(n){ return n + " Tabellen"; },
+  gespeichert:"Gespeichert:", nochNichts:"Noch nichts eingeschaltet.",
+  an:"ein", aus:"aus", keineVorlage:"keine Vorlage",
+  templates:function(n){ return n === 1 ? "1 Vorlage" : n + " Vorlagen"; },
+  tagFehlt:"Tabelle gibt es nicht mehr", tagGeaendert:"geändert", tagOhne:"ohne Vorlage",
+  toggle:function(t){ return "PDF-Export für " + t; },
+
+  dlgTitel:"Änderungen speichern?",
+  dlgEin:"Einschalten", dlgAus:"Ausschalten", abbrechen:"Abbrechen",
+  dlgFuss:"Geschrieben wird eine einzige Einstellung. Alle hier nicht genannten Tabellen bleiben unverändert.",
+
+  errKein:"<b>Keine Einstellung vorhanden.</b> In dieser Umgebung gibt es noch keinen Einstellungssatz für den PDF-Export. Speichern ist deshalb gesperrt – bitte vorher Bescheid geben.",
+  errMehr:function(n){ return "<b>" + n + " Einstellungssätze gefunden.</b> Welcher gilt, ist nicht eindeutig. Speichern ist gesperrt."; },
+  errJson:function(w){ return "<b>Die gespeicherte Einstellung ist beschädigt.</b> Speichern ist gesperrt, damit nichts überschrieben wird. Inhalt: <code>" + w + "</code>"; },
+  errLaden:"<b>Konnte nicht laden.</b> ",
+  errSpeichern:"<b>Nicht gespeichert.</b> ",
+  errRechte:" – zum Ändern braucht es Schreibrechte auf die PDF-Einstellung, also Systemadministrator oder Systemanpasser.",
+  errKeinEtag:"<b>Die Version des Einstellungssatzes ist unbekannt.</b> Dataverse hat beim Lesen kein ETag geliefert. Ohne das lässt sich eine parallele Änderung nicht erkennen, deshalb ist Speichern gesperrt. Seite neu laden; bleibt es dabei, bitte melden.",
+  errEtagKurz:"Ohne bekannte Satzversion wird nichts geschrieben.",
+  errKonflikt:"<b>Nicht gespeichert.</b> Jemand anderes hat die Einstellung inzwischen geändert. Die Liste ist neu geladen, deine Auswahl steht noch – bitte noch einmal speichern.",
+  entwuerfe:function(n){ return n === 1 ? "+1 Entwurf" : "+" + n + " Entwürfe"; },
+
+  warnOhne:function(n){ return n === 1 ? "Eine eingeschaltete Tabelle hat keine Word-Vorlage" : n + " eingeschaltete Tabellen haben keine Word-Vorlage"; },
+  warnVerwaist:function(n){ return n === 1 ? "ein Eintrag gehört zu einer Tabelle, die es nicht mehr gibt" : n + " Einträge gehören zu Tabellen, die es nicht mehr gibt"; },
+  warnKopf:"<b>Hinweis:</b> ", warnZeigen:"anzeigen",
+
+  okKopf:"<b>Gespeichert.</b>",
+  tippsKopf:"Damit es bei den Nutzern ankommt:",
+  tippCache:"Unten rechts <b>Zwischenspeicher leeren</b> klicken, dann den Tab mit der App schließen und neu öffnen. Ohne das zeigt die Befehlsleiste noch den alten Stand – auch bei dir selbst. Zeigt sie ihn danach immer noch, im Dialog zusätzlich <b>lokale Datenbanken</b> anhaken.",
+  tippKnopf:"Danach steht <b>Export to PDF</b> in der Befehlsleiste. Ist die Leiste schmal, versteckt sie ihn unter <b>Weitere Befehle</b> (&#8942;).",
+  tippOhneVorlage:function(l){ return "Für " + l + " ist jetzt eingeschaltet, aber es gibt keine Word-Vorlage. Der Knopf erscheint dort, die Auswahl bleibt aber leer – Vorlage hochladen unter Einstellungen, Vorlagen, Dokumentvorlagen."; },
+  tippAus:function(l){ return "Für " + l + " verschwindet der Knopf erst nach dem Leeren des Zwischenspeichers."; },
+  tippAndere:"Andere Nutzer sehen die Änderung, sobald ihre Sitzung die Befehlsleiste neu lädt – spätestens nach dem nächsten Anmelden.",
+  cacheHint:"← jetzt hier",
+
+  cTitel:"Zwischenspeicher dieser Umgebung leeren?",
+  cText:function(h){ return "<p>Löscht nur, was der Browser für <b>" + h + "</b> zwischengespeichert hat. Andere Websites und andere Umgebungen bleiben unberührt – anders als bei Strg+Shift+Entf, das browserweit wirkt.</p>"; },
+  cEintraege:function(n){ return n === 1 ? "1 Cache-Eintrag" : n + " Cache-Einträge"; },
+  cDb:function(n){ return n === 1 ? "1 lokale Datenbank" : n + " lokale Datenbanken"; },
+  cDbUnbekannt:"Lokale Datenbanken: in diesem Browser nicht auflistbar",
+  cDbHinweis:"Nur nötig, wenn die Befehlsleiste nach dem Leeren noch den alten Stand zeigt. Nicht synchronisierte Offline-Daten gehen dabei verloren.",
+  cSw:function(n){ return n + " Service Worker"; },
+  cWarn:"<b>Kurz prüfen:</b> Wenn jemand in dieser Umgebung offline gearbeitet hat und die Daten noch nicht synchronisiert sind, gehen sie dabei verloren. Im normalen Online-Betrieb sind das keine Nutzdaten – die App lädt alles neu.",
+  cFirefox:"Dieser Browser gibt die Liste der lokalen Datenbanken nicht heraus (betrifft unter anderem Firefox). Dann bleibt nur der Weg über Strg+Shift+Entf.",
+  cLeeren:"Leeren", cNichts:"Nichts zu leeren",
+  cFertig:function(l){ return "<b>Geleert:</b> " + l + ". Jetzt den Tab mit der App schließen und neu öffnen."; },
+  cNix:function(h){ return "<b>Nichts geleert.</b> Für <code>" + h + "</code> war kein Zwischenspeicher vorhanden."; },
+  cFehler:function(l){ return " Nicht geleert: " + l + "."; },
+  cListe:"Betroffen sind:",
+  cWeitere:function(n){ return "und " + n + " weitere"; },
+  cSwHinweis:"Service Worker sind nicht vorausgewählt. Sie betreffen nur das Offline-Verhalten, nicht die Befehlsleiste.",
+  cUnsicher:function(l){ return " Nicht bestätigt: " + l + " – ein anderer Tab hält die Datenbank offen. Alle Tabs dieser Umgebung schließen und erneut versuchen."; },
+
+  kanonFehlt:"<b>Die Design-Grundlage fehlt.</b> Die Webressource <code>theme.css</code> wurde nicht geladen. Das Werkzeug funktioniert, sieht aber unfertig aus. Pruefen, ob die Datei in dieser Umgebung veroeffentlicht ist.",
+  nurLesen:"<b>Nur-Lese-Modus.</b> Du darfst die PDF-Einstellung in dieser Umgebung nicht ändern. Dafür braucht es eine Sicherheitsrolle mit Schreibrecht auf die PDF-Einstellung – in der Regel Systemadministrator.",
+  werDarf:"Wer darf ändern?",
+  wdTitel:"Wer darf die PDF-Einstellung ändern?",
+  wdLade:"Rollen werden gelesen …",
+  wdDu:function(j){ return j === true ? "<b>Du darfst ändern.</b>"
+    : j === false ? "<b>Du darfst nicht ändern</b> – nur ansehen."
+    : "<b>Unklar, ob du ändern darfst.</b> Die Rechteprüfung ließ sich nicht beantworten. Entschieden wird beim Speichern von Dataverse."; },
+  wdRollen:function(n){ return n === 1 ? "Eine Sicherheitsrolle hat Schreibrecht:" : n + " Sicherheitsrollen haben Schreibrecht:"; },
+  wdKeine:"Keine Sicherheitsrolle hat Schreibrecht. Dann kann niemand außer Systemadministratoren etwas ändern – die umgehen die Rollenprüfung.",
+  wdFehler:"Die Rollen konnten nicht gelesen werden. Dafür braucht es selbst Leserechte auf Sicherheitsrollen.",
+  wdHinweis:"Die Liste zeigt Rollennamen. Dieselbe Rolle kann in mehreren Geschäftseinheiten liegen; gezählt wird sie einmal. Systemadministratoren stehen nicht zwingend dabei, weil ihre Rechte nicht über einzelne Privilegien laufen.",
+  schliessen:"Schließen"
+},
+en: {
+  titel:"Export to PDF", suche:"Search table …",
+  fAlle:"All", fAktiv:"Switched on", fEigen:"Custom", fVorlage:"With template only",
+  verwerfen:"Discard", save:"Save", cache:"Clear cached data",
+  hPdf:"PDF", hTab:"Table", hVor:"Templates", hSt:"Status",
+  lade:"One moment, loading tables …",
+  empty:"No table matches the search and filters.",
+  zuViele:function(n){ return "Showing the first 400 of " + n + " tables. Please narrow the search."; },
+  zaehler:function(a,g){ return "<b>" + a + "</b> switched on" + (g ? " &middot; <b>" + g + "</b> changed" : ""); },
+  gelesen:function(n){ return n + " tables"; },
+  gespeichert:"Saved:", nochNichts:"Nothing switched on yet.",
+  an:"on", aus:"off", keineVorlage:"no template",
+  templates:function(n){ return n === 1 ? "1 template" : n + " templates"; },
+  tagFehlt:"table no longer exists", tagGeaendert:"changed", tagOhne:"no template",
+  toggle:function(t){ return "PDF export for " + t; },
+
+  dlgTitel:"Save changes?",
+  dlgEin:"Switch on", dlgAus:"Switch off", abbrechen:"Cancel",
+  dlgFuss:"A single setting is written. Every table not listed here stays as it is.",
+
+  errKein:"<b>No setting found.</b> This environment has no PDF export setting record yet. Saving is blocked – please get in touch first.",
+  errMehr:function(n){ return "<b>Found " + n + " setting records.</b> It is not clear which one applies. Saving is blocked."; },
+  errJson:function(w){ return "<b>The stored setting is damaged.</b> Saving is blocked so nothing gets overwritten. Content: <code>" + w + "</code>"; },
+  errLaden:"<b>Could not load.</b> ",
+  errSpeichern:"<b>Not saved.</b> ",
+  errRechte:" – changing this needs write access to the PDF setting, so System Administrator or System Customizer.",
+  errKeinEtag:"<b>The version of the setting record is unknown.</b> Dataverse returned no ETag when reading it. Without one a parallel change cannot be detected, so saving is blocked. Reload the page; if it stays that way, please report it.",
+  errEtagKurz:"Nothing is written without a known record version.",
+  errKonflikt:"<b>Not saved.</b> Somebody else changed the setting in the meantime. The list has been reloaded and your selection is still here – please save again.",
+  entwuerfe:function(n){ return n === 1 ? "+1 draft" : "+" + n + " drafts"; },
+
+  warnOhne:function(n){ return n === 1 ? "One table is switched on without a Word template" : n + " tables are switched on without a Word template"; },
+  warnVerwaist:function(n){ return n === 1 ? "one entry belongs to a table that no longer exists" : n + " entries belong to tables that no longer exist"; },
+  warnKopf:"<b>Note:</b> ", warnZeigen:"show",
+
+  okKopf:"<b>Saved.</b>",
+  tippsKopf:"So that users actually see it:",
+  tippCache:"Click <b>Clear cached data</b> at the bottom right, then close the app tab and open it again. Without that the command bar still shows the old state – for you as well. If it still does afterwards, also tick <b>local databases</b> in the dialog.",
+  tippKnopf:"After that <b>Export to PDF</b> sits in the command bar. On a narrow bar it hides under <b>More commands</b> (&#8942;).",
+  tippOhneVorlage:function(l){ return l + " is now switched on but has no Word template. The button appears there, yet the list stays empty – upload a template under Settings, Templates, Document Templates."; },
+  tippAus:function(l){ return "For " + l + " the button only disappears once the cached data is cleared."; },
+  tippAndere:"Other users see the change as soon as their session reloads the command bar, at the latest after signing in again.",
+  cacheHint:"← now here",
+
+  cTitel:"Clear cached data for this environment?",
+  cText:function(h){ return "<p>Only removes what the browser cached for <b>" + h + "</b>. Other sites and other environments are untouched – unlike Ctrl+Shift+Del, which clears everything.</p>"; },
+  cEintraege:function(n){ return n + " cache entries"; },
+  cDb:function(n){ return n + " local databases"; },
+  cDbUnbekannt:"Local databases: this browser does not list them",
+  cDbHinweis:"Only needed if the command bar still shows the old state after clearing. Unsynced offline data is lost with it.",
+  cSw:function(n){ return n + " service workers"; },
+  cWarn:"<b>Quick check:</b> If somebody worked offline in this environment and the data is not synced yet, it will be lost. In normal online use none of this is business data – the app reloads everything.",
+  cFirefox:"This browser does not expose the list of local databases (Firefox among others). There only Ctrl+Shift+Del helps.",
+  cLeeren:"Clear", cNichts:"Nothing to clear",
+  cFertig:function(l){ return "<b>Cleared:</b> " + l + ". Now close the app tab and open it again."; },
+  cNix:function(h){ return "<b>Nothing cleared.</b> No cached data found for <code>" + h + "</code>."; },
+  cFehler:function(l){ return " Not cleared: " + l + "."; },
+  cListe:"This affects:",
+  cWeitere:function(n){ return "and " + n + " more"; },
+  cSwHinweis:"Service workers are not pre-selected. They only affect offline behaviour, not the command bar.",
+  cUnsicher:function(l){ return " Not confirmed: " + l + " – another tab is holding the database open. Close all tabs for this environment and try again."; },
+
+  kanonFehlt:"<b>The design base is missing.</b> The web resource <code>theme.css</code> did not load. The tool works but looks unfinished. Check whether the file is published in this environment.",
+  nurLesen:"<b>Read-only.</b> You are not allowed to change the PDF setting in this environment. That needs a security role with write access to the PDF setting, normally System Administrator.",
+  werDarf:"Who can change this?",
+  wdTitel:"Who can change the PDF setting?",
+  wdLade:"Reading roles …",
+  wdDu:function(j){ return j === true ? "<b>You can change it.</b>"
+    : j === false ? "<b>You cannot change it</b> – view only."
+    : "<b>Whether you can change it is unknown.</b> The privilege check could not be answered. Dataverse decides when you save."; },
+  wdRollen:function(n){ return n === 1 ? "One security role has write access:" : n + " security roles have write access:"; },
+  wdKeine:"No security role has write access. Then nobody can change it except System Administrators, who bypass the privilege check.",
+  wdFehler:"The roles could not be read. That needs read access to security roles yourself.",
+  wdHinweis:"The list shows role names. The same role can exist in several business units; it is counted once. System Administrators are not necessarily listed, because their access does not come from individual privileges.",
+  schliessen:"Close"
+}
+};
+
+var LANG = "en";
+function t(k){ var v = (T[LANG] || T.en)[k]; return v === undefined ? k : v; }
+
+var B = location.origin + "/api/data/v9.2/";
+var H = { "Accept":"application/json", "OData-MaxVersion":"4.0", "OData-Version":"4.0" };
+var LS = "exporttopdf";
+var CACHE_DEFAULTS = { caches:true, idb:false, sw:false };
+
+var ENV = { name:null, production:false };
+var S = { record:null, count:0, raw:"", json:{}, etag:null, saving:false, jsonBroken:false, tables:[], changes:{},
+          filter:"all", templatesOnly:true, readErrors:[], lastChange:null,
+          ich:null, writePrivilege:null, mayWrite:null };
+
+function $(id){ return document.getElementById(id); }
+function esc(s){ return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
+function store(k,v){ try{ localStorage.setItem(LS+"."+k, v); }catch(e){} }
+function readStored(k){ try{ return localStorage.getItem(LS+"."+k); }catch(e){ return null; } }
+
+var ALERT = { ok:"success", warn:"warning", err:"error", info:"information" };
+var ALERT_ICON = { ok:"\u2713", warn:"!", err:"!", info:"i" };
+function message(art, html){
+  var m = $("message");
+  m.className = "an x-alert x-alert-" + (ALERT[art] || "neutral");
+  m.innerHTML = '<span class="x-alert-icon" aria-hidden="true">' + ALERT_ICON[art] + '</span>'
+    + '<div><p class="x-alert-body">' + html + "</p></div>";
+}
+function hideMessage(){ var m = $("message"); m.className = ""; m.innerHTML = ""; }
+
+async function web(pfad){
+  var r = await fetch(B + pfad, { method:"GET", credentials:"same-origin", headers:H });
+  if(!r.ok){ var e = new Error("GET " + pfad.split("?")[0] + " HTTP " + r.status + ": " + (await r.text()).slice(0,300)); e.status = r.status; throw e; }
+  return r.json();
+}
+async function send(m, pfad, body, etag){
+  var hd = { "Accept":"application/json", "Content-Type":"application/json; charset=utf-8",
+             "OData-MaxVersion":"4.0", "OData-Version":"4.0" };
+  if(m === "PATCH"){
+    if(!etag){ throw new Error(t("errEtagKurz")); }
+    hd["If-Match"] = etag;
+  }
+  var r = await fetch(B + pfad, { method:m, credentials:"same-origin", headers:hd, body:JSON.stringify(body) });
+  if(!r.ok){ var e = new Error(m + " HTTP " + r.status + ": " + (await r.text()).slice(0,400)); e.status = r.status; throw e; }
+  return true;
+}
+async function allPages(pfad){
+  var out = [], url = pfad;
+  while(url){
+    var j = await web(url);
+    out = out.concat(j.value || []);
+    var n = j["@odata.nextLink"];
+    url = n ? n.slice(n.indexOf("/api/data/v9.2/") + 15) : null;
+  }
+  return out;
+}
+
+async function readEnvironment(){
+  try{
+    var o = await web("RetrieveCurrentOrganization(AccessType=@p1)?@p1=Microsoft.Dynamics.CRM.EndpointAccessType'Default'");
+    var d = o.Detail || {};
+    ENV.name = d.FriendlyName || d.UniqueName || null;
+  }catch(e){ ENV.name = null; }
+  if(!ENV.name){ ENV.name = location.host.split(".")[0]; }
+  ENV.production = /\b(prod|prd|live)\b/i.test(ENV.name);
+}
+
+async function load(){
+  var P = await web("pdfsettings?$select=pdfsettingid,pdfsettingsjson");
+  var records = P.value || [];
+  S.count = records.length;
+  S.record = records[0] || null;
+  S.raw = S.record ? (S.record.pdfsettingsjson || "") : "";
+  S.etag = S.record ? (S.record["@odata.etag"] || null) : null;
+  S.jsonBroken = false;
+  S.json = {};
+  if(S.raw){
+    var P0 = null;
+    try{ P0 = JSON.parse(S.raw); }catch(e){ S.jsonBroken = true; }
+    if(!S.jsonBroken){
+      if(!P0 || typeof P0 !== "object" || Array.isArray(P0)){ S.jsonBroken = true; }
+      else if(Object.keys(P0).some(function(k){ return typeof P0[k] !== "boolean"; })){ S.jsonBroken = true; }
+      else { S.json = P0; }
+    }
+  }
+
+  var V = [];
+  try{ V = await allPages("documenttemplates?$select=name,associatedentitytypecode,status&$filter=documenttype%20eq%202"); }
+  catch(e){ S.readErrors.push(e.message); }
+  var templates = {};
+  V.forEach(function(x){
+    var k = String(x.associatedentitytypecode || "").toLowerCase();
+    if(!k){ return; }
+    var z = templates[k] = templates[k] || { fertig:0, entwurf:0 };
+    if(x.status === true){ z.entwurf++; } else { z.fertig++; }
+  });
+
+  var E = await allPages("EntityDefinitions?$select=LogicalName,ObjectTypeCode,IsCustomEntity,IsPrivate,DisplayName");
+  var list = [], gesehen = {};
+  E.forEach(function(d){
+    var k = String(d.LogicalName || "").toLowerCase();
+    if(!k || d.IsPrivate === true){ return; }
+    gesehen[k] = true;
+    list.push({ t:k, label:((d.DisplayName || {}).UserLocalizedLabel || {}).Label || null,
+                 otc:d.ObjectTypeCode, custom:d.IsCustomEntity === true,
+                 templates:((templates[k] || {}).fertig || 0),
+                 entwuerfe:((templates[k] || {}).entwurf || 0), enabled:S.json[k] === true });
+  });
+  Object.keys(S.json).forEach(function(k){
+    var n = String(k).toLowerCase();
+    if(!gesehen[n]){
+      list.push({ t:n, label:null, otc:null, custom:null,
+                   templates:((templates[n] || {}).fertig || 0),
+                   entwuerfe:((templates[n] || {}).entwurf || 0), enabled:S.json[k] === true, orphan:true });
+    }
+  });
+  list.sort(function(a,b){
+    var x = (a.label || a.t).toLowerCase(), y = (b.label || b.t).toLowerCase();
+    return x < y ? -1 : x > y ? 1 : 0;
+  });
+  S.tables = list;
+}
+
+async function checkPrivileges(){
+  try{
+    S.ich = (await web("WhoAmI()")).UserId;
+    var P = (await web("EntityDefinitions(LogicalName='pdfsetting')/Privileges?$select=Name,PrivilegeId,PrivilegeType")).value || [];
+    var w = P.filter(function(x){ return x.PrivilegeType === 2 || /write/i.test(x.Name || ""); })[0];
+    if(!w){ return; }
+    S.writePrivilege = w.PrivilegeId;
+    var U = await web("systemusers(" + S.ich + ")/Microsoft.Dynamics.CRM.RetrieveUserPrivileges()");
+    var L = U.RolePrivileges || U.rolePrivileges || [];
+    if(!L.length){ S.mayWrite = null; return; }
+    S.mayWrite = L.some(function(x){
+      return String(x.PrivilegeId || x.privilegeId || "").toLowerCase() === String(w.PrivilegeId).toLowerCase();
+    });
+  }catch(e){
+    S.mayWrite = null;
+  }
+}
+
+async function rolesWithWriteAccess(){
+  if(!S.writePrivilege){ throw new Error("kein Privileg ermittelt"); }
+  var RP = (await web("roleprivilegescollection?$select=roleid,privilegedepthmask&$filter=privilegeid eq " + S.writePrivilege)).value || [];
+  var ids = {}, L = [];
+  RP.forEach(function(x){ var r = String(x.roleid || "").toLowerCase(); if(r && !ids[r]){ ids[r] = 1; L.push(r); } });
+  var names = {};
+  for(var i = 0; i < L.length; i += 20){
+    var part = L.slice(i, i + 20).map(function(r){ return "roleid eq " + r; }).join(" or ");
+    var R = (await web("roles?$select=name,roleid&$filter=" + encodeURIComponent(part))).value || [];
+    R.forEach(function(r){ names[r.name] = 1; });
+  }
+  return Object.keys(names).sort();
+}
+
+async function whoCanChangeFlow(){
+  var dlg = $("dlgW");
+  $("dlgW-body").innerHTML = "<p>" + esc(t("wdLade")) + "</p>";
+  dlg.returnValue = "";
+  if(typeof dlg.showModal === "function"){ dlg.showModal(); }
+  var h = "<p>" + t("wdDu")(S.mayWrite) + "</p>";
+  try{
+    var R = await rolesWithWriteAccess();
+    if(!R.length){ h += '<div class="note-box">' + esc(t("wdKeine")) + "</div>"; }
+    else {
+      h += "<p style=\"margin-top:12px\">" + esc(t("wdRollen")(R.length)) + "</p><ul>"
+         + R.map(function(x){ return "<li>" + esc(x) + "</li>"; }).join("") + "</ul>";
+    }
+  }catch(e){
+    h += '<div class="note-box">' + esc(t("wdFehler")) + "</div>";
+  }
+  h += '<p class="dlg-note">' + esc(t("wdHinweis")) + "</p>";
+  $("dlgW-body").innerHTML = h;
+}
+
+function targetState(x){ return (x.t in S.changes) ? S.changes[x.t] : x.enabled; }
+function canSave(){ return S.count === 1 && !S.jsonBroken && !!S.etag && S.mayWrite !== false; }
+function name(x){ return x.label || x.t; }
+
+function visibleRows(){
+  var q = ($("search").value || "").trim().toLowerCase();
+  return S.tables.filter(function(x){
+    var s = targetState(x);
+    if(S.templatesOnly && !x.templates){ return false; }
+    if(S.filter === "enabled" && !s){ return false; }
+    if(S.filter === "custom" && !x.custom){ return false; }
+    if(!q){ return true; }
+    return x.t.indexOf(q) >= 0 || (x.label || "").toLowerCase().indexOf(q) >= 0;
+  });
+}
+
+function render(){
+  var L = visibleRows(), h = "";
+  L.slice(0, 400).forEach(function(x){
+    var s = targetState(x), ge = (x.t in S.changes);
+    h += '<tr class="' + (ge ? "changed" : "") + '">'
+      + '<td><label class="toggle"><input type="checkbox" data-t="' + esc(x.t) + '"' + (s ? " checked" : "")
+      + (S.saving || S.mayWrite === false ? " disabled" : "")
+      + ' aria-label="' + esc(t("toggle")(name(x))) + '"><span></span></label></td>'
+      + '<td><div class="table-name">' + esc(name(x))
+        + (x.orphan ? '<span class="badge warn">' + esc(t("tagFehlt")) + '</span>' : "")
+        + (ge ? '<span class="badge changed">' + esc(t("tagGeaendert")) + '</span>' : "")
+        + '</div><div class="table-logical">' + esc(x.t) + (x.otc != null ? " &middot; " + esc(String(x.otc)) : "") + '</div></td>'
+      + '<td class="templates' + (x.templates ? "" : " without") + '">'
+        + (x.templates ? esc(t("templates")(x.templates)) : esc(t("keineVorlage")))
+        + (x.entwuerfe ? " <span class=\"entwurf\">" + esc(t("entwuerfe")(x.entwuerfe)) + "</span>" : "") + '</td>'
+      + '<td><span class="state ' + (s ? "an" : "aus") + '">' + esc(s ? t("an") : t("aus")) + '</span>'
+        + (s && !x.templates ? '<span class="badge warn">' + esc(t("tagOhne")) + '</span>' : "") + '</td>'
+      + '</tr>';
+  });
+  $("tbody").innerHTML = h;
+  $("tbl").hidden = L.length === 0;
+  if(L.length > 400){ $("empty").hidden = false; $("empty").textContent = t("zuViele")(L.length); }
+  else { $("empty").hidden = L.length !== 0; $("empty").textContent = t("empty"); }
+  updateCounts();
+}
+
+function updateCounts(){
+  var g = Object.keys(S.changes).length;
+  var a = S.tables.filter(targetState).length;
+  $("counter").innerHTML = t("zaehler")(a, g);
+  $("save").disabled = S.saving || g === 0 || !canSave();
+  $("discard").disabled = S.saving || g === 0;
+  $("footer").textContent = t("gelesen")(S.tables.length);
+  $("stored").textContent = S.raw ? (t("gespeichert") + " " + S.raw) : t("nochNichts");
+}
+
+function validate(){
+  if(S.mayWrite === false){ message("warn", t("nurLesen")); return; }
+  if(S.count === 0){ message("err", t("errKein")); return; }
+  if(S.count > 1){ message("err", t("errMehr")(S.count)); return; }
+  if(S.jsonBroken){ message("err", t("errJson")(esc(S.raw.slice(0,200)))); return; }
+  if(!S.etag){ message("err", t("errKeinEtag")); return; }
+  var w = [];
+  var without = S.tables.filter(function(x){ return x.enabled && !x.templates; });
+  if(without.length){
+    w.push(t("warnOhne")(without.length)
+      + ' <a href="#" id="show-problems">' + esc(t("warnZeigen")) + "</a>");
+  }
+  var orphans = S.tables.filter(function(x){ return x.orphan; });
+  if(orphans.length){ w.push(t("warnVerwaist")(orphans.length)); }
+  if(S.readErrors.length){ w.push(esc(S.readErrors.join(" · "))); }
+  if(w.length){
+    message("warn", t("warnKopf") + w.join(". ") + ".");
+    var a = $("show-problems");
+    if(a){ a.addEventListener("click", function(ev){ ev.preventDefault(); showProblems(); }); }
+  } else { hideMessage(); }
+}
+
+function showProblems(){
+  S.templatesOnly = false;
+  $("filter-template").setAttribute("aria-pressed", "false");
+  store("templatesOnly", "0");
+  S.filter = "enabled";
+  Array.prototype.forEach.call(document.querySelectorAll("#filters .x-chip:not(.schalt)"), function(x){
+    x.setAttribute("aria-pressed", String(x.getAttribute("data-f") === "enabled"));
+  });
+  $("search").value = "";
+  render();
+}
+
+function diff(){
+  var an = [], aus = [];
+  Object.keys(S.changes).forEach(function(k){ (S.changes[k] ? an : aus).push(k); });
+  return { an:an.sort(), aus:aus.sort() };
+}
+function nextJson(){
+  var o = {};
+  Object.keys(S.json).forEach(function(k){ o[k] = S.json[k]; });
+  Object.keys(S.changes).forEach(function(k){ if(S.changes[k]){ o[k] = true; } else { delete o[k]; } });
+  return JSON.stringify(o);
+}
+function labelOf(k){
+  var x = S.tables.filter(function(y){ return y.t === k; })[0];
+  return x ? name(x) : k;
+}
+
+function saveDialogText(){
+  var d = diff(), h = "";
+  if(d.an.length){ h += '<div class="ein">' + esc(t("dlgEin")) + '</div><ul>'
+    + d.an.map(function(k){ return "<li>" + esc(labelOf(k)) + "</li>"; }).join("") + "</ul>"; }
+  if(d.aus.length){ h += '<div class="aus abstand">' + esc(t("dlgAus")) + '</div><ul>'
+    + d.aus.map(function(k){ return "<li>" + esc(labelOf(k)) + "</li>"; }).join("") + "</ul>"; }
+  h += '<p class="dlg-note">' + esc(t("dlgFuss")) + '</p>';
+  return h;
+}
+
+function tipsAfterSave(d){
+  var h = t("okKopf") + " <b>" + esc(t("tippsKopf")) + "</b><ul>";
+  h += "<li>" + t("tippCache") + "</li>";
+  if(d.an.length){ h += "<li>" + t("tippKnopf") + "</li>"; }
+  var without = d.an.filter(function(k){
+    var x = S.tables.filter(function(y){ return y.t === k; })[0];
+    return x && !x.templates;
+  });
+  if(without.length){ h += "<li>" + t("tippOhneVorlage")(without.map(labelOf).map(esc).join(", ")) + "</li>"; }
+  if(d.aus.length){ h += "<li>" + t("tippAus")(d.aus.map(labelOf).map(esc).join(", ")) + "</li>"; }
+  h += "<li>" + t("tippAndere") + "</li>";
+  h += "</ul>";
+  return h;
+}
+
+function schalterSperren(){
+  Array.prototype.forEach.call(document.querySelectorAll("#tbody input[type=checkbox]"), function(c){
+    c.disabled = S.saving || S.mayWrite === false;
+  });
+}
+async function save(){
+  var next = nextJson(), d = diff(), gesendet = {};
+  Object.keys(S.changes).forEach(function(k){ gesendet[k] = S.changes[k]; });
+  S.saving = true;
+  updateCounts();
+  schalterSperren();
+  try{
+    await send("PATCH", "pdfsettings(" + S.record.pdfsettingid + ")", { pdfsettingsjson: next }, S.etag);
+  }catch(e){
+    S.saving = false;
+    schalterSperren();
+    if(e.status === 412){
+      try{ await load(); }catch(e2){ S.readErrors.push(e2.message); }
+      render();
+      message("warn", t("errKonflikt"));
+      return;
+    }
+    message("err", t("errSpeichern") + esc(e.message) + (e.status === 403 ? t("errRechte") : ""));
+    updateCounts();
+    return;
+  }
+  S.saving = false;
+  S.lastChange = d;
+  Object.keys(gesendet).forEach(function(k){
+    if(S.changes[k] === gesendet[k]){ delete S.changes[k]; }
+  });
+  try{ await load(); }catch(e){ S.readErrors.push(e.message); }
+  render();
+  message("ok", tipsAfterSave(d));
+  $("cache-hint").textContent = t("cacheHint");
+  window.setTimeout(function(){ $("cache-hint").textContent = ""; }, 25000);
+}
+
+async function findCaches(){
+  var f = { caches:[], idb:[], sw:0, idbUnbekannt:false };
+  try{ if(window.caches && caches.keys){ f.caches = await caches.keys(); } }catch(e){}
+  try{
+    if(window.indexedDB && indexedDB.databases){
+      f.idb = ((await indexedDB.databases()) || []).map(function(d){ return d.name; }).filter(Boolean);
+    } else { f.idbUnbekannt = true; }
+  }catch(e){ f.idbUnbekannt = true; }
+  try{
+    if(navigator.serviceWorker && navigator.serviceWorker.getRegistrations){
+      f.sw = (await navigator.serviceWorker.getRegistrations()).length;
+    }
+  }catch(e){}
+  return f;
+}
+async function clearCaches(f, wahl){
+  var removed = { caches:0, idb:0, sw:0, fehler:[], unsicher:[] };
+  if(wahl.caches){
+    for(var i=0;i<f.caches.length;i++){
+      try{ if(await caches.delete(f.caches[i])){ removed.caches++; } }catch(e){ removed.fehler.push(f.caches[i]); }
+    }
+  }
+  if(wahl.idb){
+    for(var k=0;k<f.idb.length;k++){
+      var stand = await new Promise(function(ok){
+        var r = indexedDB.deleteDatabase(f.idb[k]), fertig = false;
+        function ende(v){ if(!fertig){ fertig = true; ok(v); } }
+        r.onsuccess = function(){ ende("ok"); };
+        r.onerror = function(){ ende("fehler"); };
+        r.onblocked = function(){ ende("offen"); };
+        window.setTimeout(function(){ ende("offen"); }, 3000);
+      });
+      if(stand === "ok"){ removed.idb++; }
+      else if(stand === "offen"){ removed.unsicher.push(f.idb[k]); }
+      else { removed.fehler.push(f.idb[k]); }
+    }
+  }
+  if(wahl.sw){
+    try{
+      if(navigator.serviceWorker && navigator.serviceWorker.getRegistrations){
+        var R = await navigator.serviceWorker.getRegistrations();
+        for(var j=0;j<R.length;j++){ if(await R[j].unregister()){ removed.sw++; } }
+      }
+    }catch(e){ removed.fehler.push("service worker"); }
+  }
+  return removed;
+}
+function cacheFeld(id, text, an, moeglich){
+  return '<label class="c-wahl"><input type="checkbox" id="' + id + '"' + (an ? " checked" : "")
+       + (moeglich ? "" : " disabled") + '><span>' + esc(text) + "</span></label>";
+}
+function cacheWahl(){
+  function an(id){ var e = $(id); return !!(e && e.checked && !e.disabled); }
+  return { caches:an("c-caches"), idb:an("c-idb"), sw:an("c-sw") };
+}
+function cacheDialogText(f){
+  var h = t("cText")(esc(location.host));
+  h += '<div class="fund">';
+  h += cacheFeld("c-caches", t("cEintraege")(f.caches.length), CACHE_DEFAULTS.caches && f.caches.length > 0, f.caches.length > 0);
+  h += f.idbUnbekannt ? "<span>" + esc(t("cDbUnbekannt")) + "</span>"
+                      : cacheFeld("c-idb", t("cDb")(f.idb.length), CACHE_DEFAULTS.idb && f.idb.length > 0, f.idb.length > 0)
+                        + '<p class="c-hinweis">' + esc(t("cDbHinweis")) + "</p>";
+  h += cacheFeld("c-sw", t("cSw")(f.sw), CACHE_DEFAULTS.sw && f.sw > 0, f.sw > 0);
+  h += "</div>";
+  var N = f.caches.concat(f.idb);
+  if(N.length){
+    h += '<p class="dlg-note">' + esc(t("cListe")) + '</p><ul class="c-liste">'
+       + N.slice(0, 12).map(function(x){ return "<li>" + esc(x) + "</li>"; }).join("")
+       + (N.length > 12 ? "<li>" + esc(t("cWeitere")(N.length - 12)) + "</li>" : "") + "</ul>";
+  }
+  h += '<div class="note-box">' + t("cWarn") + "</div>";
+  h += '<p class="dlg-note">' + esc(t("cSwHinweis")) + "</p>";
+  if(f.idbUnbekannt){ h += '<div class="note-box">' + esc(t("cFirefox")) + "</div>"; }
+  return h;
+}
+async function clearAndReport(f, wahl){
+  $("cache").disabled = true;
+  var removed = await clearCaches(f, wahl);
+  $("cache").disabled = false;
+  var parts = [];
+  if(removed.caches){ parts.push(t("cEintraege")(removed.caches)); }
+  if(removed.idb){ parts.push(t("cDb")(removed.idb)); }
+  if(removed.sw){ parts.push(t("cSw")(removed.sw)); }
+  var rest = (removed.fehler.length ? t("cFehler")(esc(removed.fehler.join(", "))) : "")
+           + (removed.unsicher.length ? t("cUnsicher")(esc(removed.unsicher.join(", "))) : "");
+  if(!parts.length){ message("warn", t("cNix")(esc(location.host)) + rest); return; }
+  message(removed.unsicher.length ? "warn" : "ok", t("cFertig")(esc(parts.join(", "))) + rest);
+  $("cache-hint").textContent = "";
+}
+async function cacheFlow(){
+  var f = await findCaches(), dlg = $("dlgC");
+  $("dlgC-body").innerHTML = cacheDialogText(f);
+  var nichts = (f.caches.length + f.idb.length + f.sw) === 0;
+  $("dlgC-ok").textContent = nichts ? t("cNichts") : t("cLeeren");
+  function stand(){
+    var w = cacheWahl();
+    $("dlgC-ok").disabled = nichts || !(w.caches || w.idb || w.sw);
+  }
+  Array.prototype.forEach.call($("dlgC-body").querySelectorAll("input[type=checkbox]"), function(c){
+    c.addEventListener("change", stand);
+  });
+  stand();
+  dlg.returnValue = "";
+  dlg.onclose = async function(){ var w = cacheWahl(); if(dlg.returnValue === "ja"){ await clearAndReport(f, w); } };
+  if(typeof dlg.showModal === "function"){ dlg.showModal(); }
+  else if(window.confirm(t("cTitel"))){ await clearAndReport(f, cacheWahl()); }
+}
+
+function setLanguage(l){
+  LANG = (l === "en") ? "en" : "de";
+  document.documentElement.lang = LANG;
+  store("spr", LANG);
+  Array.prototype.forEach.call(document.querySelectorAll(".language button"), function(b){
+    b.setAttribute("aria-pressed", String(b.getAttribute("data-l") === LANG));
+  });
+  $("title").textContent = t("titel");
+  document.title = t("titel") + " \u2013 " + (ENV.name || location.host);
+  $("search").placeholder = t("suche");
+  $("search").setAttribute("aria-label", t("suche"));
+  document.querySelector('[data-f=all]').textContent = t("fAlle");
+  document.querySelector('[data-f=enabled]').textContent = t("fAktiv");
+  document.querySelector('[data-f=custom]').textContent = t("fEigen");
+  $("filter-template").textContent = t("fVorlage");
+  $("discard").textContent = t("verwerfen");
+  $("save").textContent = t("save");
+  $("cache").textContent = t("cache");
+  $("col-pdf").textContent = t("hPdf");
+  $("col-table").textContent = t("hTab");
+  $("col-templates").textContent = t("hVor");
+  $("col-status").textContent = t("hSt");
+  $("loading-text").textContent = t("lade");
+  $("dlg-title").textContent = t("dlgTitel");
+  $("dlg-cancel").textContent = t("abbrechen");
+  $("dlg-ok").textContent = t("save");
+  $("dlgC-title").textContent = t("cTitel");
+  $("dlgC-cancel").textContent = t("abbrechen");
+  $("dlgC-ok").textContent = t("cLeeren");
+  $("who-can-change").textContent = t("werDarf");
+  $("dlgW-title").textContent = t("wdTitel");
+  $("dlgW-close").textContent = t("schliessen");
+  if(S.tables.length){ render(); validate(); }
+}
+function detectLanguage(){
+  var g = readStored("spr");
+  if(g === "de" || g === "en"){ return g; }
+  var L = (navigator.languages && navigator.languages.length) ? navigator.languages : [navigator.language || "en"];
+  for(var i=0;i<L.length;i++){
+    var s = String(L[i] || "").toLowerCase();
+    if(s.indexOf("de") === 0){ return "de"; }
+    if(s.indexOf("en") === 0){ return "en"; }
+  }
+  return "en";
+}
+
+function bindEvents(){
+  $("search").addEventListener("input", render);
+  Array.prototype.forEach.call(document.querySelectorAll("#filters .x-chip:not(.schalt)"), function(c){
+    c.addEventListener("click", function(){
+      S.filter = c.getAttribute("data-f");
+      Array.prototype.forEach.call(document.querySelectorAll("#filters .x-chip:not(.schalt)"), function(x){
+        x.setAttribute("aria-pressed", String(x === c));
+      });
+      render();
+    });
+  });
+  $("filter-template").addEventListener("click", function(){
+    S.templatesOnly = !S.templatesOnly;
+    $("filter-template").setAttribute("aria-pressed", String(S.templatesOnly));
+    store("templatesOnly", S.templatesOnly ? "1" : "0");
+    render();
+  });
+  $("tbody").addEventListener("change", function(ev){
+    var cb = ev.target;
+    if(!cb || cb.type !== "checkbox"){ return; }
+    var k = cb.getAttribute("data-t");
+    var x = S.tables.filter(function(y){ return y.t === k; })[0];
+    if(!x){ return; }
+    if(cb.checked === x.enabled){ delete S.changes[k]; } else { S.changes[k] = cb.checked; }
+    render();
+  });
+  $("discard").addEventListener("click", function(){ S.changes = {}; render(); validate(); });
+  $("save").addEventListener("click", function(){
+    var dlg = $("dlg");
+    $("dlg-body").innerHTML = saveDialogText();
+    dlg.returnValue = "";
+    dlg.onclose = function(){ if(dlg.returnValue === "ja"){ save(); } };
+    if(typeof dlg.showModal === "function"){ dlg.showModal(); }
+    else if(window.confirm(t("dlgTitel"))){ save(); }
+  });
+  $("cache").addEventListener("click", function(){ cacheFlow(); });
+  $("who-can-change").addEventListener("click", function(ev){ ev.preventDefault(); whoCanChangeFlow(); });
+  Array.prototype.forEach.call(document.querySelectorAll(".language button"), function(b){
+    b.addEventListener("click", function(){ setLanguage(b.getAttribute("data-l")); });
+  });
+  window.addEventListener("beforeunload", function(e){
+    if(Object.keys(S.changes).length){ e.preventDefault(); e.returnValue = ""; }
+  });
+}
+
+function themeMissingScreen(){
+  var d = document.createElement("div");
+  d.id = "theme-missing";
+  d.setAttribute("style", "margin:40px auto;max-width:620px;padding:16px;border:1px solid #bac1c4;"
+    + "border-left:4px solid #805c00;border-radius:8px;background:#fff7df;color:#805c00;"
+    + "font:14px/20px 'Segoe UI',Arial,sans-serif");
+  d.innerHTML = t("kanonFehlt");
+  document.body.setAttribute("style", "margin:0;background:#fafbfb");
+  document.body.innerHTML = "";
+  document.body.appendChild(d);
+}
+
+function themeLoaded(){
+  var v = getComputedStyle(document.documentElement).getPropertyValue("--accent").trim();
+  return v !== "";
+}
+
+async function start(){
+  LANG = detectLanguage();
+  if(readStored("templatesOnly") === "0"){ S.templatesOnly = false; }
+  $("filter-template").setAttribute("aria-pressed", String(S.templatesOnly));
+  if(!themeLoaded()){ themeMissingScreen(); return; }
+  $("host").textContent = location.host;
+  await readEnvironment();
+  $("environment").textContent = ENV.name;
+  if(ENV.production){ $("environment").className = "environment prd"; }
+  setLanguage(LANG);
+  bindEvents();
+  try{ await load(); }
+  catch(e){ $("loading").hidden = true; message("err", t("errLaden") + esc(e.message)); return; }
+  await checkPrivileges();
+  $("loading").hidden = true;
+  render();
+  validate();
+  if(!themeLoaded()){ themeMissingScreen(); return; }
+}
+
+if(document.readyState === "loading"){ document.addEventListener("DOMContentLoaded", start); }
+else { start(); }
+})();
+</script>
+</body>
+</html>

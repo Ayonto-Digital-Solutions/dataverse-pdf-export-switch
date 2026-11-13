@@ -1,0 +1,27 @@
+{
+  "name": "dataverse-pdf-export-switch",
+  "version": "1.1.2",
+  "description": "Web resource for Microsoft Dataverse that shows which tables have Export to PDF enabled and lets administrators switch it per table.",
+  "author": {
+    "name": "Ayonto UG (haftungsbeschränkt)",
+    "url": "https://ayon.to"
+  },
+  "private": true,
+  "scripts": {
+    "test": "node test/app.test.js"
+  },
+  "devDependencies": {
+    "playwright": "1.65.0"
+  },
+  "license": "MIT",
+  "keywords": [
+    "dataverse",
+    "power-platform",
+    "model-driven-apps",
+    "pdf",
+    "web-resource"
+  ],
+  "engines": {
+    "node": ">=22"
+  }
+}
