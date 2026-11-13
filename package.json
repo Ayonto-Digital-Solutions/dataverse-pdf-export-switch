@@ -23,5 +23,13 @@
   ],
   "engines": {
     "node": ">=22"
+  },
+  "homepage": "https://github.com/Ayonto-Digital-Solutions/dataverse-pdf-export-switch#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Ayonto-Digital-Solutions/dataverse-pdf-export-switch.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Ayonto-Digital-Solutions/dataverse-pdf-export-switch/issues"
   }
 }
